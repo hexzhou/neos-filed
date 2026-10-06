@@ -1,0 +1,10 @@
+{
+  "source": "https://code.moenext.com/mycard/ygopro-images-field.git",
+  "revision": "9ac455383a10a9bec7b670f370b2665950fc439e",
+  "count": 340,
+  "format": "WebP",
+  "encoder": "cwebp",
+  "encoderVersion": "1.6.0\nlibsharpyuv: 0.4.2",
+  "quality": 85,
+  "method": 6
+}

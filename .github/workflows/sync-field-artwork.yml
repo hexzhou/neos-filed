@@ -1,0 +1,64 @@
+name: Sync field artwork
+
+on:
+  schedule:
+    - cron: "45 3 * * *"
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: "上游分支或提交"
+        default: master
+        required: true
+        type: string
+  push:
+    branches: [main]
+    paths:
+      - scripts/**
+      - tests/**
+      - .github/workflows/sync-field-artwork.yml
+  pull_request:
+    paths:
+      - scripts/**
+      - tests/**
+      - .github/workflows/sync-field-artwork.yml
+
+concurrency:
+  group: field-artwork-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # 固定发行版，避免每日运行因转换器升级而重写全部图片。
+    container: python:3.13-slim-bookworm
+    permissions:
+      contents: write
+    steps:
+      - name: Install Git and WebP encoder
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git webp
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+      - name: Test conversion and failure handling
+        run: python3 -m unittest discover -s tests -v
+      - name: Synchronize upstream artwork
+        if: github.event_name != 'pull_request'
+        env:
+          FIELD_REVISION: ${{ inputs.revision || 'master' }}
+        run: python3 scripts/sync-field-artwork.py --revision "$FIELD_REVISION"
+      - name: Commit updated artwork
+        if: github.event_name != 'pull_request'
+        run: |
+          git add public/neos-assets/fields
+          if git diff --cached --quiet; then
+            echo "Upstream artwork is unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          revision=$(python3 -c 'import json; print(json.load(open("public/neos-assets/fields/source.json"))["revision"])')
+          git commit -m "chore: sync field artwork from ${revision}"
+          # GitHub 自带令牌提交不会再次触发工作流，避免同步循环。
+          git push origin "HEAD:${GITHUB_REF_NAME}"
